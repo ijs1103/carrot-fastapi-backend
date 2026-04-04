@@ -1,0 +1,1 @@
+cd /Users/jusang/Documents/carrot-market-backend && source venv/bin/activate && pip freeze > requirements.txt
