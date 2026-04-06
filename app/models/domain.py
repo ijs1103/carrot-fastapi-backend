@@ -13,6 +13,7 @@ class User(Base):
     phone = Column(String(50), unique=True, index=True, nullable=True)
     github_id = Column(String(255), unique=True, index=True, nullable=True)
     avatar = Column(String(255), nullable=True)
+    neighborhood = Column(String(100), nullable=True)  # 작성자 동네
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -42,8 +43,9 @@ class Product(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(255), nullable=False)
     price = Column(Float, nullable=False)
-    photo = Column(String(255), nullable=False)
+    photo = Column(Text, nullable=False)
     description = Column(Text, nullable=False)
+    status = Column(String(50), default="판매중")
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -51,10 +53,15 @@ class Product(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     user = relationship("User", back_populates="products")
 
+    @property
+    def neighborhood(self):
+        return self.user.neighborhood if self.user else None
+
 class Post(Base):
     __tablename__ = "posts"
     
     id = Column(Integer, primary_key=True, index=True)
+    topic = Column(String(100), nullable=False)  # 게시글 주제: 동네친구, 맛집, 일반
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     views = Column(Integer, default=0)
@@ -66,6 +73,18 @@ class Post(Base):
     user = relationship("User", back_populates="posts")
     comments = relationship("Comment", back_populates="post", cascade="all, delete-orphan")
     likes = relationship("Like", back_populates="post", cascade="all, delete-orphan")
+    images = relationship("PostImage", back_populates="post", cascade="all, delete-orphan")
+
+class PostImage(Base):
+    __tablename__ = "post_images"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    url = Column(String(500), nullable=False)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False)
+    post = relationship("Post", back_populates="images")
 
 class Comment(Base):
     __tablename__ = "comments"

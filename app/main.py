@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.database import engine, Base
-from app.api import auth, products
+from app.api import auth, products, posts
 
 app = FastAPI(title=settings.PROJECT_NAME)
 
@@ -18,6 +18,7 @@ app.add_middleware(
 
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(products.router, prefix="/api/v1")
+app.include_router(posts.router, prefix="/api/v1")
 
 @app.on_event("startup")
 async def startup_event():

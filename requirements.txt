@@ -1,1 +1,12 @@
-cd /Users/jusang/Documents/carrot-market-backend && source venv/bin/activate && pip freeze > requirements.txt
+fastapi
+uvicorn[standard]
+sqlalchemy
+asyncmy
+pydantic-settings
+passlib[bcrypt]
+python-jose[cryptography]
+python-multipart
+email-validator
+PyJWT
+greenlet
+bcrypt==4.0.1

@@ -5,8 +5,8 @@ from datetime import timedelta
 
 from app.database import get_db
 from app.models.domain import User
-from app.schemas.domain import UserCreate, UserResponse, TokenResponse
-from app.crud.domain import get_user_by_username, create_user
+from app.schemas.domain import UserCreate, UserResponse, TokenResponse, UserUpdate
+from app.crud.domain import get_user_by_username, create_user, update_user
 from app.core.security import verify_password, create_access_token
 from app.api.deps import get_current_user
 
@@ -36,3 +36,16 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
 @router.get("/me", response_model=UserResponse)
 async def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+@router.patch("/me", response_model=UserResponse)
+async def update_users_me(
+    user_in: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if user_in.username and user_in.username != current_user.username:
+        existing = await get_user_by_username(db, username=user_in.username)
+        if existing:
+            raise HTTPException(status_code=400, detail="Username already taken")
+            
+    return await update_user(db, current_user, user_in)
