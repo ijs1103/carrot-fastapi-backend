@@ -23,6 +23,7 @@ class User(Base):
     posts = relationship("Post", back_populates="user", cascade="all, delete-orphan")
     comments = relationship("Comment", back_populates="user", cascade="all, delete-orphan")
     likes = relationship("Like", back_populates="user", cascade="all, delete-orphan")
+    product_favorites = relationship("ProductFavorite", back_populates="user", cascade="all, delete-orphan")
     messages = relationship("Message", back_populates="user")
     live_streams = relationship("LiveStream", back_populates="user")
 
@@ -52,10 +53,15 @@ class Product(Base):
     
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     user = relationship("User", back_populates="products")
+    favorites = relationship("ProductFavorite", back_populates="product", cascade="all, delete-orphan")
 
     @property
     def neighborhood(self):
         return self.user.neighborhood if self.user else None
+
+    @property
+    def favorite_count(self):
+        return len(self.favorites) if self.favorites else 0
 
 class Post(Base):
     __tablename__ = "posts"
@@ -112,6 +118,17 @@ class Like(Base):
     
     user = relationship("User", back_populates="likes")
     post = relationship("Post", back_populates="likes")
+
+class ProductFavorite(Base):
+    __tablename__ = "product_favorites"
+    
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), primary_key=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    user = relationship("User", back_populates="product_favorites")
+    product = relationship("Product", back_populates="favorites")
 
 class ChatRoom(Base):
     __tablename__ = "chat_rooms"

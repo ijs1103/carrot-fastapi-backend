@@ -71,6 +71,7 @@ class ProductResponse(ProductBase):
     user_id: int
     status: str
     neighborhood: Optional[str] = None
+    favorite_count: int = 0
     created_at: datetime
     updated_at: datetime
     user: UserAuthorResponse

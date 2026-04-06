@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete
 from sqlalchemy.orm import selectinload
 
-from app.models.domain import User, Product, Post, PostImage, Comment
+from app.models.domain import User, Product, Post, PostImage, Comment, ProductFavorite
 from app.schemas.domain import UserCreate, ProductCreate, PostCreate, CommentCreate, UserUpdate
 from app.core.security import get_password_hash
 
@@ -38,7 +38,7 @@ async def update_user(db: AsyncSession, user: User, user_in: UserUpdate) -> User
 
 async def get_products(db: AsyncSession, user_id: int = None, status: str = None, cursor: int = None, limit: int = 20):
     """상품 목록 조회 (user_id 및 status 필터, 페이지네이션 지원)"""
-    query = select(Product).options(selectinload(Product.user)).order_by(Product.id.desc()).limit(limit + 1)
+    query = select(Product).options(selectinload(Product.user), selectinload(Product.favorites)).order_by(Product.id.desc()).limit(limit + 1)
     
     if user_id:
         query = query.where(Product.user_id == user_id)
@@ -60,10 +60,11 @@ async def create_product(db: AsyncSession, product_in: ProductCreate, user_id: i
     db.add(db_product)
     await db.commit()
     await db.refresh(db_product)
-    return db_product
+    # user, favorites 관계를 포함하여 다시 조회
+    return await get_product(db, product_id=db_product.id)
 
 async def get_product(db: AsyncSession, product_id: int) -> Product | None:
-    result = await db.execute(select(Product).options(selectinload(Product.user)).where(Product.id == product_id))
+    result = await db.execute(select(Product).options(selectinload(Product.user), selectinload(Product.favorites)).where(Product.id == product_id))
     return result.scalar_one_or_none()
 
 async def update_product_status(db: AsyncSession, product: Product, status: str) -> Product:
@@ -76,6 +77,60 @@ async def update_product_status(db: AsyncSession, product: Product, status: str)
 async def delete_product(db: AsyncSession, product_id: int):
     await db.execute(delete(Product).where(Product.id == product_id))
     await db.commit()
+
+# ==================== Product Favorite CRUD ====================
+
+async def toggle_product_favorite(db: AsyncSession, product_id: int, user_id: int) -> bool:
+    """찜하기 토글: 이미 찜한 경우 해제, 아니면 추가. 찜 추가 시 True, 해제 시 False 반환"""
+    result = await db.execute(
+        select(ProductFavorite).where(
+            ProductFavorite.product_id == product_id,
+            ProductFavorite.user_id == user_id,
+        )
+    )
+    existing = result.scalar_one_or_none()
+    
+    if existing:
+        await db.delete(existing)
+        await db.commit()
+        db.expire_all()
+        return False
+    else:
+        fav = ProductFavorite(product_id=product_id, user_id=user_id)
+        db.add(fav)
+        await db.commit()
+        db.expire_all()
+        return True
+
+async def is_product_favorited(db: AsyncSession, product_id: int, user_id: int) -> bool:
+    """해당 유저가 해당 상품을 찜했는지 여부"""
+    result = await db.execute(
+        select(ProductFavorite).where(
+            ProductFavorite.product_id == product_id,
+            ProductFavorite.user_id == user_id,
+        )
+    )
+    return result.scalar_one_or_none() is not None
+
+async def get_user_favorite_products(db: AsyncSession, user_id: int, cursor: int = None, limit: int = 20):
+    """유저가 찜한 상품 목록 조회 (페이지네이션 지원)"""
+    query = (
+        select(Product)
+        .join(ProductFavorite, Product.id == ProductFavorite.product_id)
+        .where(ProductFavorite.user_id == user_id)
+        .options(selectinload(Product.user), selectinload(Product.favorites))
+        .order_by(ProductFavorite.created_at.desc())
+        .limit(limit + 1)
+    )
+    
+    if cursor:
+        query = query.where(Product.id < cursor)
+    
+    result = await db.execute(query)
+    items = list(result.scalars().all())
+    
+    next_cursor = items[-1].id if len(items) > limit else None
+    return items[:limit], next_cursor
 
 # ==================== Post CRUD ====================
 
