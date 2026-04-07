@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete
 from sqlalchemy.orm import selectinload
 
-from app.models.domain import User, Product, Post, PostImage, Comment, ProductFavorite
+from app.models.domain import User, Product, Post, PostImage, Comment, ProductFavorite, ProductBlock, Report
 from app.schemas.domain import UserCreate, ProductCreate, PostCreate, CommentCreate, UserUpdate
 from app.core.security import get_password_hash
 
@@ -36,8 +36,8 @@ async def update_user(db: AsyncSession, user: User, user_in: UserUpdate) -> User
 
 # ==================== Product CRUD ====================
 
-async def get_products(db: AsyncSession, user_id: int = None, status: str = None, cursor: int = None, limit: int = 20):
-    """상품 목록 조회 (user_id 및 status 필터, 페이지네이션 지원)"""
+async def get_products(db: AsyncSession, user_id: int = None, status: str = None, cursor: int = None, limit: int = 20, exclude_blocked_by: int = None):
+    """상품 목록 조회 (user_id 및 status 필터, 페이지네이션 지원, 차단된 상품 제외)"""
     query = select(Product).options(selectinload(Product.user), selectinload(Product.favorites)).order_by(Product.id.desc()).limit(limit + 1)
     
     if user_id:
@@ -45,6 +45,11 @@ async def get_products(db: AsyncSession, user_id: int = None, status: str = None
         
     if status:
         query = query.where(Product.status == status)
+        
+    if exclude_blocked_by:
+        query = query.where(Product.id.notin_(
+            select(ProductBlock.product_id).where(ProductBlock.user_id == exclude_blocked_by)
+        ))
         
     if cursor:
         query = query.where(Product.id < cursor)
@@ -255,3 +260,58 @@ async def delete_comment(db: AsyncSession, comment_id: int):
     await db.execute(delete(Comment).where(Comment.id == comment_id))
     await db.commit()
 
+# ==================== Product Block CRUD ====================
+
+async def block_product(db: AsyncSession, user_id: int, product_id: int) -> ProductBlock:
+    """상품 차단"""
+    block = ProductBlock(user_id=user_id, product_id=product_id)
+    db.add(block)
+    await db.commit()
+    await db.refresh(block)
+    return block
+
+async def unblock_product(db: AsyncSession, user_id: int, product_id: int):
+    """상품 차단 해제"""
+    await db.execute(
+        delete(ProductBlock).where(
+            ProductBlock.user_id == user_id,
+            ProductBlock.product_id == product_id,
+        )
+    )
+    await db.commit()
+
+async def get_product_block(db: AsyncSession, user_id: int, product_id: int) -> ProductBlock | None:
+    """상품 차단 관계 조회"""
+    result = await db.execute(
+        select(ProductBlock).where(
+            ProductBlock.user_id == user_id,
+            ProductBlock.product_id == product_id,
+        )
+    )
+    return result.scalar_one_or_none()
+
+# ==================== Report CRUD ====================
+
+async def create_report(db: AsyncSession, reporter_id: int, target_type: str, target_id: int, reason: str) -> Report:
+    """신고 생성"""
+    report = Report(
+        reporter_id=reporter_id,
+        target_type=target_type,
+        target_id=target_id,
+        reason=reason,
+    )
+    db.add(report)
+    await db.commit()
+    await db.refresh(report)
+    return report
+
+async def get_existing_report(db: AsyncSession, reporter_id: int, target_type: str, target_id: int) -> Report | None:
+    """중복 신고 확인"""
+    result = await db.execute(
+        select(Report).where(
+            Report.reporter_id == reporter_id,
+            Report.target_type == target_type,
+            Report.target_id == target_id,
+        )
+    )
+    return result.scalar_one_or_none()

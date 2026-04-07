@@ -26,6 +26,12 @@ class User(Base):
     product_favorites = relationship("ProductFavorite", back_populates="user", cascade="all, delete-orphan")
     messages = relationship("Message", back_populates="user")
     live_streams = relationship("LiveStream", back_populates="user")
+    blocked_products = relationship(
+        "ProductBlock",
+        foreign_keys="ProductBlock.user_id",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 class SMSToken(Base):
     __tablename__ = "sms_tokens"
@@ -167,3 +173,31 @@ class LiveStream(Base):
     
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     user = relationship("User", back_populates="live_streams")
+
+class ProductBlock(Base):
+    """상품 차단 테이블 - 유저가 특정 상품을 차단"""
+    __tablename__ = "product_blocks"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    user = relationship("User", foreign_keys=[user_id], back_populates="blocked_products")
+    product = relationship("Product", foreign_keys=[product_id])
+
+class Report(Base):
+    """신고 테이블 - 다형성 구조 (USER, PRODUCT, POST, COMMENT 등)"""
+    __tablename__ = "reports"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    reporter_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    target_type = Column(String(50), nullable=False)   # USER, PRODUCT, POST, COMMENT
+    target_id = Column(Integer, nullable=False)
+    reason = Column(String(500), nullable=False)
+    status = Column(String(50), default="PENDING")     # PENDING, RESOLVED
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    reporter = relationship("User", foreign_keys=[reporter_id])

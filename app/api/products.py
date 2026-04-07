@@ -4,8 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.domain import User
 from app.schemas.domain import ProductCreate, ProductResponse, ProductListResponse, ProductStatusUpdate, ProductStatusEnum
-from app.crud.domain import get_products, create_product, get_product, delete_product, update_product_status, toggle_product_favorite, is_product_favorited, get_user_favorite_products
-from app.api.deps import get_current_user
+from app.crud.domain import get_products, create_product, get_product, delete_product, update_product_status, toggle_product_favorite, is_product_favorited, get_user_favorite_products, block_product, unblock_product, get_product_block
+from app.api.deps import get_current_user, get_optional_current_user
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -13,9 +13,11 @@ router = APIRouter(prefix="/products", tags=["products"])
 async def read_products(
     cursor: int = Query(None, description="Cursor for pagination"),
     limit: int = Query(20, ge=1, le=100),
+    current_user: User | None = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    items, next_cursor = await get_products(db, cursor=cursor, limit=limit, status=ProductStatusEnum.FOR_SALE.value)
+    exclude_blocked_by = current_user.id if current_user else None
+    items, next_cursor = await get_products(db, cursor=cursor, limit=limit, status=ProductStatusEnum.FOR_SALE.value, exclude_blocked_by=exclude_blocked_by)
     return ProductListResponse(
         data=items,
         next_cursor=next_cursor,
@@ -141,3 +143,39 @@ async def check_favorite(
         "is_favorited": favorited,
         "favorite_count": product.favorite_count,
     }
+
+# ==================== Product Block ====================
+
+@router.post("/{id}/block", status_code=status.HTTP_201_CREATED)
+async def create_product_block(
+    id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """특정 상품 차단하기"""
+    product = await get_product(db, product_id=id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+        
+    if product.user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="본인의 상품은 차단할 수 없습니다.")
+        
+    existing_block = await get_product_block(db, user_id=current_user.id, product_id=id)
+    if existing_block:
+        raise HTTPException(status_code=400, detail="이미 차단한 상품입니다.")
+        
+    await block_product(db, user_id=current_user.id, product_id=id)
+    return {"message": "상품이 차단되었습니다."}
+
+@router.delete("/{id}/block", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_product_block(
+    id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """상품 차단 해제하기"""
+    existing_block = await get_product_block(db, user_id=current_user.id, product_id=id)
+    if not existing_block:
+        raise HTTPException(status_code=404, detail="차단 내역이 없습니다.")
+        
+    await unblock_product(db, user_id=current_user.id, product_id=id)

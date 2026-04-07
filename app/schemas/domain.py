@@ -13,6 +13,12 @@ class ProductStatusEnum(str, Enum):
     FOR_SALE = "판매중"
     SOLD_OUT = "거래완료"
 
+class ReportTargetTypeEnum(str, Enum):
+    USER = "USER"
+    PRODUCT = "PRODUCT"
+    POST = "POST"
+    COMMENT = "COMMENT"
+
 # --- Generic Tokens ---
 class TokenResponse(BaseModel):
     access_token: str
@@ -141,3 +147,26 @@ class PostDetailResponse(BaseModel):
     images: List[PostImageResponse]
     comments: List[CommentResponse]
 
+# --- Block/Report Schemas ---
+
+class ProductBlockResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    user_id: int
+    product_id: int
+    created_at: datetime
+
+class ReportCreate(BaseModel):
+    target_type: ReportTargetTypeEnum
+    target_id: int
+    reason: str
+
+class ReportResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    reporter_id: int
+    target_type: str
+    target_id: int
+    reason: str
+    status: str
+    created_at: datetime
