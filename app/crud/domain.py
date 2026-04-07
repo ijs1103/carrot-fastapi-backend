@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete
 from sqlalchemy.orm import selectinload
 
-from app.models.domain import User, Product, Post, PostImage, Comment, ProductFavorite, ProductBlock, Report
+from app.models.domain import User, Product, Post, PostImage, Comment, ProductFavorite, ProductBlock, Report, ChatRoom, Message
 from app.schemas.domain import UserCreate, ProductCreate, PostCreate, CommentCreate, UserUpdate
 from app.core.security import get_password_hash
 
@@ -10,6 +10,10 @@ from app.core.security import get_password_hash
 
 async def get_user_by_username(db: AsyncSession, username: str) -> User | None:
     result = await db.execute(select(User).where(User.username == username))
+    return result.scalar_one_or_none()
+
+async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
+    result = await db.execute(select(User).where(User.email == email))
     return result.scalar_one_or_none()
 
 async def create_user(db: AsyncSession, user_in: UserCreate) -> User:
@@ -315,3 +319,77 @@ async def get_existing_report(db: AsyncSession, reporter_id: int, target_type: s
         )
     )
     return result.scalar_one_or_none()
+
+# ==================== Chat CRUD ====================
+import uuid
+
+async def get_or_create_chat_room(db: AsyncSession, product_id: int, buyer_id: int, seller_id: int) -> tuple[ChatRoom, bool]:
+    """채팅방 조회 또는 생성 (UUID 발급). bool은 새로 생성되었는지 여부"""
+    # 1. 이미 존재하는지 먼저 확인
+    result = await db.execute(
+        select(ChatRoom).where(
+            ChatRoom.product_id == product_id,
+            ChatRoom.buyer_id == buyer_id
+        )
+    )
+    existing_room = result.scalar_one_or_none()
+    if existing_room:
+        return existing_room, False
+        
+    # 2. 없으면 생성
+    new_uuid = str(uuid.uuid4())
+    new_room = ChatRoom(
+        id=new_uuid,
+        product_id=product_id,
+        buyer_id=buyer_id,
+        seller_id=seller_id
+    )
+    db.add(new_room)
+    await db.commit()
+    await db.refresh(new_room)
+    return new_room, True
+
+async def get_seller_chat_room(db: AsyncSession, product_id: int, seller_id: int) -> ChatRoom | None:
+    """판매자가 해당 상품에 대해 열려있는 채팅방 중 첫 번째 방을 조회"""
+    result = await db.execute(
+        select(ChatRoom).where(
+            ChatRoom.product_id == product_id,
+            ChatRoom.seller_id == seller_id
+        ).order_by(ChatRoom.created_at.desc())
+    )
+    return result.scalars().first()
+
+async def get_chat_room(db: AsyncSession, room_id: str) -> ChatRoom | None:
+    result = await db.execute(
+        select(ChatRoom).options(
+            selectinload(ChatRoom.product).options(
+                selectinload(Product.user),
+                selectinload(Product.favorites)
+            ),
+            selectinload(ChatRoom.buyer),
+            selectinload(ChatRoom.seller)
+        ).where(ChatRoom.id == room_id)
+    )
+    return result.scalar_one_or_none()
+
+async def create_message(db: AsyncSession, room_id: str, user_id: int, payload: str) -> Message:
+    message = Message(
+        chat_room_id=room_id,
+        user_id=user_id,
+        payload=payload
+    )
+    db.add(message)
+    await db.commit()
+    await db.refresh(message)
+    # Re-fetch to include user object
+    result = await db.execute(select(Message).options(selectinload(Message.user)).where(Message.id == message.id))
+    return result.scalar_one()
+
+async def get_chat_messages(db: AsyncSession, room_id: str) -> list[Message]:
+    result = await db.execute(
+        select(Message)
+        .options(selectinload(Message.user))
+        .where(Message.chat_room_id == room_id)
+        .order_by(Message.created_at.asc())
+    )
+    return list(result.scalars().all())

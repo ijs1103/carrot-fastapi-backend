@@ -140,9 +140,16 @@ class ChatRoom(Base):
     __tablename__ = "chat_rooms"
     
     id = Column(String(255), primary_key=True) # cuid mapped to string
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    buyer_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    seller_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
+    product = relationship("Product", foreign_keys=[product_id])
+    buyer = relationship("User", foreign_keys=[buyer_id])
+    seller = relationship("User", foreign_keys=[seller_id])
     messages = relationship("Message", back_populates="room", cascade="all, delete-orphan")
 
 class Message(Base):

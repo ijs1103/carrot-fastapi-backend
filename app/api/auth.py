@@ -6,7 +6,7 @@ from datetime import timedelta
 from app.database import get_db
 from app.models.domain import User
 from app.schemas.domain import UserCreate, UserResponse, TokenResponse, UserUpdate
-from app.crud.domain import get_user_by_username, create_user, update_user
+from app.crud.domain import get_user_by_username, get_user_by_email, create_user, update_user
 from app.core.security import verify_password, create_access_token
 from app.api.deps import get_current_user
 
@@ -17,12 +17,17 @@ async def signup(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
     user = await get_user_by_username(db, username=user_in.username)
     if user:
         raise HTTPException(status_code=400, detail="Username already registered")
-    
+    if user_in.email:
+        existing_email = await get_user_by_email(db, email=user_in.email)
+        if existing_email:
+            raise HTTPException(status_code=400, detail="Email already registered")
+            
     new_user = await create_user(db, user_in)
     return new_user
 
 @router.post("/login", response_model=TokenResponse)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+    print(f"DEBUG LOGIN INPUT -> username: '{form_data.username}', password: '{form_data.password}'")
     user = await get_user_by_username(db, username=form_data.username)
     if not user or not verify_password(form_data.password, user.password):
         raise HTTPException(

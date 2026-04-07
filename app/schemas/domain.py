@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from datetime import datetime
 from typing import Optional, List
 from enum import Enum
@@ -32,6 +32,13 @@ class UserBase(BaseModel):
     github_id: Optional[str] = None
     avatar: Optional[str] = None
     neighborhood: Optional[str] = None
+
+    @field_validator('email', 'phone', 'github_id', mode='before')
+    @classmethod
+    def empty_str_to_none(cls, v):
+        if v == "":
+            return None
+        return v
 class UserCreate(UserBase):
     password: str
 
@@ -170,3 +177,45 @@ class ReportResponse(BaseModel):
     reason: str
     status: str
     created_at: datetime
+
+# --- Chat Schemas ---
+
+class ChatRoomBase(BaseModel):
+    id: str
+    created_at: datetime
+    updated_at: datetime
+
+class ChatRoomResponse(ChatRoomBase):
+    model_config = ConfigDict(from_attributes=True)
+
+class ChatRoomCreate(BaseModel):
+    product_id: int
+
+class ChatRoomInitResponse(BaseModel):
+    room: ChatRoomResponse
+    ticket: str
+
+class ChatRoomDetailResponse(ChatRoomBase):
+    model_config = ConfigDict(from_attributes=True)
+    product_id: int
+    buyer_id: int
+    seller_id: int
+    product: ProductResponse
+    buyer: UserAuthorResponse
+    seller: UserAuthorResponse
+
+class MessageBase(BaseModel):
+    payload: str
+    chat_room_id: str
+    user_id: int
+
+class MessageResponse(MessageBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+class InternalMessageCreate(BaseModel):
+    room_id: str
+    user_id: int
+    payload: str
