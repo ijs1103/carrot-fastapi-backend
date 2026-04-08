@@ -5,7 +5,7 @@ import os
 
 from app.api import deps
 from app.crud import domain as crud
-from app.schemas.domain import ChatRoomCreate, ChatRoomInitResponse, InternalMessageCreate, ChatRoomDetailResponse
+from app.schemas.domain import ChatRoomCreate, ChatRoomInitResponse, InternalMessageCreate, ChatRoomDetailResponse, MessageCreate
 from app.models.domain import User
 from app.core.security import create_access_token
 
@@ -47,6 +47,46 @@ async def get_or_create_room(
     
     return {"room": room, "ticket": ticket}
 
+@router.get("/rooms/me")
+async def get_my_rooms(
+    db: AsyncSession = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    """현재 유저가 참여 중인 채팅방 목록"""
+    room_list = await crud.get_my_chat_rooms(db, user_id=current_user.id)
+    
+    result = []
+    for item in room_list:
+        room = item["room"]
+        last_msg = item["last_message"]
+        
+        # 상대방 결정
+        other_user = room.seller if room.buyer_id == current_user.id else room.buyer
+        
+        result.append({
+            "id": room.id,
+            "product": {
+                "id": room.product.id,
+                "title": room.product.title,
+                "photo": room.product.photo.split(',')[0].strip() if room.product.photo else "",
+                "price": room.product.price,
+            },
+            "other_user": {
+                "id": other_user.id,
+                "username": other_user.username,
+                "avatar": other_user.avatar,
+                "neighborhood": other_user.neighborhood,
+            },
+            "last_message": {
+                "payload": last_msg.payload,
+                "created_at": last_msg.created_at.isoformat(),
+            } if last_msg else None,
+            "created_at": room.created_at.isoformat(),
+            "updated_at": room.updated_at.isoformat(),
+        })
+    
+    return result
+
 @router.post("/internal/messages", status_code=status.HTTP_201_CREATED)
 async def save_message_internal(
     msg_in: InternalMessageCreate,
@@ -62,6 +102,7 @@ async def save_message_internal(
         user_id=msg_in.user_id,
         payload=msg_in.payload
     )
+    print(f"[WorkerSync] Message saved: room={msg_in.room_id}, user={msg_in.user_id}")
     return {"status": "ok", "message_id": message.id}
 
 @router.get("/{room_id}", response_model=ChatRoomDetailResponse)
@@ -77,7 +118,49 @@ async def get_room_detail(
     if current_user.id not in [room.buyer_id, room.seller_id]:
         raise HTTPException(status_code=403, detail="Not authorized to view this room")
         
-    return room
+    # Generate ticket for WebSocket connection
+    access_token_expires = timedelta(minutes=60)
+    ticket = create_access_token(
+        subject=f"{current_user.id}:{room.id}", expires_delta=access_token_expires
+    )
+    
+    # Manually attach ticket to the room object for the response
+    room_data = {
+        "id": room.id,
+        "product_id": room.product_id,
+        "buyer_id": room.buyer_id,
+        "seller_id": room.seller_id,
+        "product": room.product,
+        "buyer": room.buyer,
+        "seller": room.seller,
+        "created_at": room.created_at,
+        "updated_at": room.updated_at,
+        "ticket": ticket
+    }
+    return room_data
+
+@router.post("/{room_id}/messages")
+async def send_message(
+    room_id: str,
+    msg_in: MessageCreate,
+    db: AsyncSession = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    """WebSocket이 안될 경우를 대비한 일반 메시지 전송 API"""
+    room = await crud.get_chat_room(db, room_id=room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Chat room not found")
+        
+    if current_user.id not in [room.buyer_id, room.seller_id]:
+        raise HTTPException(status_code=403, detail="Not authorized to send messages to this room")
+        
+    message = await crud.create_message(
+        db,
+        room_id=room_id,
+        user_id=current_user.id,
+        payload=msg_in.payload
+    )
+    return message
 
 @router.get("/{room_id}/messages")
 async def get_messages_for_room(
@@ -110,3 +193,20 @@ async def get_messages_for_room(
         }
         for m in messages
     ]
+
+@router.delete("/{room_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def leave_chat_room(
+    room_id: str,
+    db: AsyncSession = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    """채팅방 나가기 (소프트 나가기 — 둘 다 나가면 실제 삭제)"""
+    room = await crud.get_chat_room(db, room_id=room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Chat room not found")
+    
+    if current_user.id not in [room.buyer_id, room.seller_id]:
+        raise HTTPException(status_code=403, detail="Not authorized to leave this room")
+    
+    await crud.leave_chat_room(db, room_id=room_id, user_id=current_user.id)
+

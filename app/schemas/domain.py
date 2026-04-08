@@ -155,6 +155,8 @@ class PostDetailResponse(BaseModel):
     comments: List[CommentResponse]
 
 # --- Block/Report Schemas ---
+class MessageCreate(BaseModel):
+    payload: str
 
 class ProductBlockResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -203,6 +205,7 @@ class ChatRoomDetailResponse(ChatRoomBase):
     product: ProductResponse
     buyer: UserAuthorResponse
     seller: UserAuthorResponse
+    ticket: Optional[str] = None
 
 class MessageBase(BaseModel):
     payload: str

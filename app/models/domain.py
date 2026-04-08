@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -143,6 +143,8 @@ class ChatRoom(Base):
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
     buyer_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     seller_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    buyer_left = Column(Boolean, default=False, server_default="0")
+    seller_left = Column(Boolean, default=False, server_default="0")
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

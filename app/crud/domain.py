@@ -372,6 +372,32 @@ async def get_chat_room(db: AsyncSession, room_id: str) -> ChatRoom | None:
     )
     return result.scalar_one_or_none()
 
+async def leave_chat_room(db: AsyncSession, room_id: str, user_id: int):
+    """채팅방 소프트 나가기 — 둘 다 나갔으면 실제 삭제"""
+    from sqlalchemy import update as sql_update
+    
+    room = await get_chat_room(db, room_id=room_id)
+    if not room:
+        return
+    
+    # 해당 유저의 left 플래그를 True로 설정
+    if room.buyer_id == user_id:
+        await db.execute(
+            sql_update(ChatRoom).where(ChatRoom.id == room_id).values(buyer_left=True)
+        )
+    elif room.seller_id == user_id:
+        await db.execute(
+            sql_update(ChatRoom).where(ChatRoom.id == room_id).values(seller_left=True)
+        )
+    await db.commit()
+    
+    # 다시 조회하여 둘 다 나갔는지 확인
+    await db.refresh(room)
+    if room.buyer_left and room.seller_left:
+        await db.execute(delete(Message).where(Message.chat_room_id == room_id))
+        await db.execute(delete(ChatRoom).where(ChatRoom.id == room_id))
+        await db.commit()
+
 async def create_message(db: AsyncSession, room_id: str, user_id: int, payload: str) -> Message:
     message = Message(
         chat_room_id=room_id,
@@ -393,3 +419,50 @@ async def get_chat_messages(db: AsyncSession, room_id: str) -> list[Message]:
         .order_by(Message.created_at.asc())
     )
     return list(result.scalars().all())
+
+async def get_my_chat_rooms(db: AsyncSession, user_id: int) -> list[dict]:
+    """현재 유저가 참여 중인 채팅방 목록 (최신 메시지 포함, 최근 활동 순 정렬)"""
+    from sqlalchemy import or_, desc, and_
+    
+    # 로그인 유저가 buyer 혹은 seller인 채팅방 조회 (나간 방은 제외)
+    result = await db.execute(
+        select(ChatRoom)
+        .options(
+            selectinload(ChatRoom.product).options(
+                selectinload(Product.user),
+                selectinload(Product.favorites)
+            ),
+            selectinload(ChatRoom.buyer),
+            selectinload(ChatRoom.seller),
+            selectinload(ChatRoom.messages).selectinload(Message.user),
+        )
+        .where(
+            or_(
+                and_(ChatRoom.buyer_id == user_id, ChatRoom.buyer_left == False),
+                and_(ChatRoom.seller_id == user_id, ChatRoom.seller_left == False),
+            )
+        )
+        .order_by(desc(ChatRoom.updated_at))
+    )
+    rooms = list(result.scalars().unique().all())
+    
+    # 각 방에서 최신 메시지 추출
+    room_list = []
+    for room in rooms:
+        latest_msg = None
+        if room.messages:
+            sorted_msgs = sorted(room.messages, key=lambda m: m.created_at, reverse=True)
+            latest_msg = sorted_msgs[0]
+        
+        room_list.append({
+            "room": room,
+            "last_message": latest_msg,
+        })
+    
+    room_list.sort(
+        key=lambda x: x["last_message"].created_at if x["last_message"] else x["room"].created_at,
+        reverse=True
+    )
+    
+    return room_list
+
