@@ -53,6 +53,7 @@ class Product(Base):
     photo = Column(Text, nullable=False)
     description = Column(Text, nullable=False)
     status = Column(String(50), default="판매중")
+    views = Column(Integer, default=0)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

@@ -86,6 +86,7 @@ class ProductResponse(ProductBase):
     id: int
     user_id: int
     status: str
+    views: int = 0
     neighborhood: Optional[str] = None
     favorite_count: int = 0
     created_at: datetime

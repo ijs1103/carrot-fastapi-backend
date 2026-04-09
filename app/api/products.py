@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.domain import User
 from app.schemas.domain import ProductCreate, ProductResponse, ProductListResponse, ProductStatusUpdate, ProductStatusEnum
-from app.crud.domain import get_products, create_product, get_product, delete_product, update_product_status, toggle_product_favorite, is_product_favorited, get_user_favorite_products, block_product, unblock_product, get_product_block
+from app.crud.domain import get_products, create_product, get_product, delete_product, update_product_status, toggle_product_favorite, is_product_favorited, get_user_favorite_products, block_product, unblock_product, get_product_block, increment_product_views
 from app.api.deps import get_current_user, get_optional_current_user
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -60,9 +60,12 @@ async def read_product(
     id: int,
     db: AsyncSession = Depends(get_db)
 ):
+    await increment_product_views(db, product_id=id)
+
     product = await get_product(db, product_id=id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
+    
     return product
 
 @router.post("", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)

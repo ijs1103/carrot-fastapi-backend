@@ -83,6 +83,16 @@ async def update_product_status(db: AsyncSession, product: Product, status: str)
     await db.refresh(product)
     return product
 
+async def increment_product_views(db: AsyncSession, product_id: int):
+    """조회수 +1 (UPDATE 문으로 직접 처리하여 세션 성능 최적화)"""
+    from sqlalchemy import update as sql_update
+    await db.execute(
+        sql_update(Product)
+        .where(Product.id == product_id)
+        .values(views=Product.views + 1)
+    )
+    await db.commit()
+
 async def delete_product(db: AsyncSession, product_id: int):
     await db.execute(delete(Product).where(Product.id == product_id))
     await db.commit()
