@@ -14,6 +14,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def signup(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
+    user_in.username = user_in.username.strip()
     user = await get_user_by_username(db, username=user_in.username)
     if user:
         raise HTTPException(status_code=400, detail="Username already registered")
@@ -27,8 +28,9 @@ async def signup(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
-    print(f"DEBUG LOGIN INPUT -> username: '{form_data.username}', password: '{form_data.password}'")
-    user = await get_user_by_username(db, username=form_data.username)
+    username = form_data.username.strip()
+    print(f"DEBUG LOGIN INPUT -> username: '{username}', password: '{form_data.password}'")
+    user = await get_user_by_username(db, username=username)
     if not user or not verify_password(form_data.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

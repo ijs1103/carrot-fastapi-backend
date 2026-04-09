@@ -33,9 +33,11 @@ class UserBase(BaseModel):
     avatar: Optional[str] = None
     neighborhood: Optional[str] = None
 
-    @field_validator('email', 'phone', 'github_id', mode='before')
+    @field_validator('username', 'email', 'phone', 'github_id', mode='before')
     @classmethod
     def empty_str_to_none(cls, v):
+        if isinstance(v, str):
+            v = v.strip()
         if v == "":
             return None
         return v
