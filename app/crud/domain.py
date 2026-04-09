@@ -204,10 +204,9 @@ async def get_post(db: AsyncSession, post_id: int) -> Post | None:
     return result.scalar_one_or_none()
 
 async def increment_post_views(db: AsyncSession, post: Post):
-    """조회수 +1"""
+    """조회수 +1 (refresh를 호출하면 미리 로딩된 관계 데이터들이 언로드되므로 commit만 수행)"""
     post.views = post.views + 1
     await db.commit()
-    await db.refresh(post)
 
 async def create_post(db: AsyncSession, post_in: PostCreate, user_id: int) -> Post:
     """게시글 생성 (이미지 포함)"""

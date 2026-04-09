@@ -47,6 +47,7 @@ class UserCreate(UserBase):
 class UserUpdate(BaseModel):
     username: Optional[str] = None
     avatar: Optional[str] = None
+    neighborhood: Optional[str] = None
 
 class UserResponse(UserBase):
     model_config = ConfigDict(from_attributes=True)
