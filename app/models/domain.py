@@ -14,6 +14,7 @@ class User(Base):
     github_id = Column(String(255), unique=True, index=True, nullable=True)
     avatar = Column(String(255), nullable=True)
     neighborhood = Column(String(100), nullable=True)  # 작성자 동네
+    fcm_token = Column(String(500), nullable=True)  # FCM 토큰 추가
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

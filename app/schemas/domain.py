@@ -226,3 +226,6 @@ class InternalMessageCreate(BaseModel):
     room_id: str
     user_id: int
     payload: str
+
+class FCMTokenUpdate(BaseModel):
+    token: str

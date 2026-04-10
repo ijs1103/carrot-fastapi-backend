@@ -8,6 +8,7 @@ from app.crud import domain as crud
 from app.schemas.domain import ChatRoomCreate, ChatRoomInitResponse, InternalMessageCreate, ChatRoomDetailResponse, MessageCreate
 from app.models.domain import User
 from app.core.security import create_access_token
+from app.core import fcm
 
 router = APIRouter()
 
@@ -103,6 +104,30 @@ async def save_message_internal(
         payload=msg_in.payload
     )
     print(f"[WorkerSync] Message saved: room={msg_in.room_id}, user={msg_in.user_id}")
+    
+    # 알림 발송 로직 추가
+    room = await crud.get_chat_room(db, room_id=msg_in.room_id)
+    if room:
+        recipient_id = room.seller_id if msg_in.user_id == room.buyer_id else room.buyer_id
+        recipient = await crud.get_user(db, user_id=recipient_id)
+        sender = await crud.get_user(db, user_id=msg_in.user_id)
+        
+        print(f"[DEBUG] FCM Recipient: ID={recipient_id}, Found={recipient is not None}")
+        if recipient:
+            print(f"[DEBUG] FCM Token exists: {bool(recipient.fcm_token)}")
+            if recipient.fcm_token:
+                print(f"[DEBUG] Calling send_chat_notification for token: {recipient.fcm_token[:10]}...")
+                await fcm.send_chat_notification(
+                    token=recipient.fcm_token,
+                    room_id=room.id,
+                    sender_name=sender.username if sender else "알 수 없음",
+                    message=msg_in.payload
+                )
+            else:
+                print(f"[DEBUG] FCM Token is EMPTY for user {recipient_id}")
+        else:
+            print(f"[DEBUG] Recipient user {recipient_id} NOT FOUND in DB")
+
     return {"status": "ok", "message_id": message.id}
 
 @router.get("/{room_id}", response_model=ChatRoomDetailResponse)
@@ -160,6 +185,18 @@ async def send_message(
         user_id=current_user.id,
         payload=msg_in.payload
     )
+
+    # 알림 발송 로직 추가
+    recipient_id = room.seller_id if current_user.id == room.buyer_id else room.buyer_id
+    recipient = await crud.get_user(db, user_id=recipient_id)
+    if recipient and recipient.fcm_token:
+         await fcm.send_chat_notification(
+            token=recipient.fcm_token,
+            room_id=room_id,
+            sender_name=current_user.username,
+            message=msg_in.payload
+        )
+
     return message
 
 @router.get("/{room_id}/messages")

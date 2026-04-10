@@ -10,3 +10,4 @@ email-validator
 PyJWT
 greenlet
 bcrypt==4.0.1
+firebase-admin

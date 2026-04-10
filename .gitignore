@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 .env
 .DS_Store" > /Users/jusang/Documents/carrot-market-backend/.gitignore
+app/core/credentials/
