@@ -9,7 +9,8 @@ class Settings(BaseSettings):
     # Secret key for JWT encode/decode
     SECRET_KEY: str = "carrot_market_super_secret_key"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7 # 7 days expire
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30  # 30분
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7  # 7일
 
     class Config:
         env_file = ".env"

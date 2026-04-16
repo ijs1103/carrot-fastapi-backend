@@ -22,6 +22,7 @@ class ReportTargetTypeEnum(str, Enum):
 # --- Generic Tokens ---
 class TokenResponse(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
 
 # --- User Schemas ---
