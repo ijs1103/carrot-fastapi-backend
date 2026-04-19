@@ -65,7 +65,7 @@ async def get_products(db: AsyncSession, user_id: int = None, status: str = None
     result = await db.execute(query)
     items = list(result.scalars().all())
     
-    next_cursor = items[-1].id if len(items) > limit else None
+    next_cursor = items[limit - 1].id if len(items) > limit else None
     return items[:limit], next_cursor
 
 async def create_product(db: AsyncSession, product_in: ProductCreate, user_id: int) -> Product:
@@ -152,7 +152,7 @@ async def get_user_favorite_products(db: AsyncSession, user_id: int, cursor: int
     result = await db.execute(query)
     items = list(result.scalars().all())
     
-    next_cursor = items[-1].id if len(items) > limit else None
+    next_cursor = items[limit - 1].id if len(items) > limit else None
     return items[:limit], next_cursor
 
 # ==================== Post CRUD ====================
@@ -200,7 +200,7 @@ async def get_posts(db: AsyncSession, cursor: int = None, limit: int = 20):
             }
         })
     
-    next_cursor = rows[limit][0].id if len(rows) > limit else None
+    next_cursor = rows[limit - 1][0].id if len(rows) > limit else None
     return items, next_cursor
 
 async def get_post(db: AsyncSession, post_id: int) -> Post | None:
@@ -224,24 +224,28 @@ async def increment_post_views(db: AsyncSession, post: Post):
 
 async def create_post(db: AsyncSession, post_in: PostCreate, user_id: int) -> Post:
     """게시글 생성 (이미지 포함)"""
-    db_post = Post(
+    try:
+        db_post = Post(
         topic=post_in.topic.value,
         title=post_in.title,
         description=post_in.description,
         user_id=user_id,
-    )
-    db.add(db_post)
-    await db.flush()  # post.id 확보
-    
-    # 이미지가 있으면 함께 저장
-    if post_in.image_urls:
-        for url in post_in.image_urls:
-            db_image = PostImage(url=url, post_id=db_post.id)
-            db.add(db_image)
-    
-    await db.commit()
-    await db.refresh(db_post)
-    return db_post
+        )
+        db.add(db_post)
+        await db.flush()  # post.id 확보
+        
+        # 이미지가 있으면 함께 저장
+        if post_in.image_urls:
+            for url in post_in.image_urls:
+                db_image = PostImage(url=url, post_id=db_post.id)
+                db.add(db_image)
+        
+        await db.commit()
+        await db.refresh(db_post)
+        return db_post
+    except Exception as e:
+        await db.rollback() # 이미지 업로드 실패시 롤백
+        raise e
 
 async def delete_post(db: AsyncSession, post_id: int):
     """게시글 삭제"""
